@@ -11,7 +11,7 @@ pipeline {
   stages {
     stage('Clone') {
       steps {
-        git 'https://github.com/nisha-subramaniyan/CI-CD_SonarQube-Docker.git'  // Your repo URL
+        git branch: 'main', url: 'https://github.com/nisha-subramaniyan/CI-CD_SonarQube-Docker.git'  // Your repo URL
       }
     }
     stage('Build & Test') {
