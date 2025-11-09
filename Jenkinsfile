@@ -1,111 +1,101 @@
-pipeline {
-    // Run the pipeline on any available Jenkins agent
-    agent any 
+// Jenkinsfile for CI/CD Pipeline with SonarQube and Docker
 
+pipeline {
+    agent any
+    
+    // Global environment variables
     environment {
-        // Docker configuration
-        DOCKERHUB_USER = 'nisha-subramaniyan'
-        IMAGE_NAME = "ci-cd-sonarqube-docker"
-        // Use BUILD_NUMBER for unique tags
-        IMAGE_TAG = "${BUILD_NUMBER}"
-        
-        // SonarQube Tool Name configured in Manage Jenkins -> Global Tool Configuration
-        SONAR_SCANNER_TOOL = 'SonarScanner' 
-        SONAR_PROJECT_KEY = 'CI-CD-SonarQube-Docker'
-        
-        // Name of the SonarQube server configuration in Manage Jenkins -> Configure System
-        SONAR_SERVER_NAME = 'Your-SonarQube-Server-Name' // <<-- *** IMPORTANT: UPDATE THIS NAME ***
+        // SonarQube setup
+        SONAR_SCANNER_HOME = tool 'SonarScanner' // Name of the SonarScanner installation in Jenkins
+        // Docker setup
+        DOCKERHUB_CREDENTIALS_ID = 'dockerhub' // Jenkins ID for DockerHub credentials
+        DOCKERHUB_USERNAME = 'nisha subramaniyan'
+        DOCKERHUB_PASSWORD = credentials('dockerhub') // Use credentials binding
+        IMAGE_NAME = "nisha-subramaniyan/ci-cd-sonar-docker"
+        IMAGE_TAG = "build-${BUILD_NUMBER}"
+        SONAR_KEY = credentials('sonarkey') // Jenkins ID for SonarQube Token
     }
     
-    // Note: Removed 'tools' block as Python often doesn't require explicit tool configuration if in PATH
-
     stages {
-        
-        // --- 1. Clone Stage ---
-        stage('Clone Source Code') {
+        // 1. Trigger (Implicitly handled by the SCM/Webhook configuration in Jenkins Job)
+        // Stage 1: Checkout (Implicitly handled by Jenkins)
+        stage('Checkout Code') {
             steps {
-                echo "Cloning repository: https://github.com/nisha-subramaniyan/CI-CD_SonarQube-Docker.git on branch: main"
-                git branch: 'main', url: 'https://github.com/nisha-subramaniyan/CI-CD_SonarQube-Docker.git'
+                echo 'Checking out code...'
+                // Code checkout is usually done automatically by Jenkins when configuring the SCM.
             }
         }
         
-        // --- 2. Build & Test Stage (Python) ---
+        // 2. Build & Test
         stage('Build & Test') {
             steps {
-                echo 'Installing Python dependencies and running tests...'
-                // Install dependencies using pip (assuming a requirements.txt file exists)
-                sh 'pip install -r requirements.txt' 
-                // Run Python unit tests (adjust command if you use pytest or a different runner)
-                sh 'python -m unittest discover' 
+                echo 'Building and running tests...'
+                // Assuming a Maven/Gradle setup for a Java project. 
+                // Using a simple shell command for a basic setup.
+                sh 'javac -cp junit-platform-console-standalone-1.8.1.jar App.java testapp.java'
+                sh 'java -jar junit-platform-console-standalone-1.8.1.jar -cp . --scan-classpath'
             }
         }
-        
-        // --- 3. SonarQube Analysis Stage ---
+
+        // 3. SonarQube Analysis
         stage('SonarQube Analysis') {
-            steps { // <--- FIXED: Added 'steps' block
-                withSonarQubeEnv(env.SONAR_SERVER_NAME) {
-                    // 'sonarkey' must be a Jenkins Secret Text credential
-                    withCredentials([string(credentialsId: 'sonarkey', variable: 'SONAR_AUTH_TOKEN')]) {
-                        echo "Starting SonarQube analysis..."
-                        
-                        // Execute SonarScanner
-                        sh "${tool env.SONAR_SCANNER_TOOL}/bin/sonar-scanner \
-                            -Dsonar.projectKey=${env.SONAR_PROJECT_KEY} \
-                            -Dsonar.login=${SONAR_AUTH_TOKEN} \
-                            -Dsonar.host.url=${env.SONAR_HOST_URL}"
-                    }
+            steps {
+                echo 'Running SonarQube analysis...'
+                withSonarQubeEnv('SonarQubeServer') { // 'SonarQubeServer' is the name of your SonarQube server configuration in Jenkins
+                    sh "${SONAR_SCANNER_HOME}/bin/sonar-scanner \
+                      -Dsonar.projectKey=CI-CD_SonarQube-Docker \
+                      -Dsonar.sources=. \
+                      -Dsonar.host.url=http://your-sonarqube-ip:9000 \
+                      -Dsonar.login=${SONAR_KEY}" 
                 }
             }
         }
 
-        // --- 4. Quality Gate Stage ---
-        stage('Quality Gate') {
+        // 4. Quality Gate Check (Fail if not met)
+        stage('Quality Gate Check') {
             steps {
-                echo 'Waiting for SonarQube Quality Gate status...'
-                timeout(time: 15, unit: 'MINUTES') {
-                    // Waits for the quality gate check
+                echo 'Waiting for Quality Gate status...'
+                timeout(time: 5, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
         }
-        
-        // --- 5. Docker Build Stage ---
+
+        // 5. Docker Build
         stage('Docker Build') {
             steps {
-                echo "Building Docker image ${env.DOCKERHUB_USER}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-                // Ensure your Dockerfile copies the Python app and runs it
-                sh "docker build -t ${env.DOCKERHUB_USER}/${env.IMAGE_NAME}:${env.IMAGE_TAG} ."
-            }
-        }
-        
-        // --- 6. Docker Push Stage ---
-        stage('Docker Push') {
-            steps { // <--- FIXED: Added 'steps' block
-                // 'dockerhub' must be a Jenkins Username/Password credential
-                withCredentials([usernamePassword(credentialsId: 'dockerhub', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
-                    echo 'Logging into DockerHub and pushing image...'
-                    
-                    // Secure Docker login using standard input
-                    sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
-
-                    // Push the built image
-                    sh "docker push ${env.DOCKERHUB_USER}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
+                echo 'Building Docker image...'
+                script {
+                    // Build the Docker image
+                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                    sh "docker build -t ${IMAGE_NAME}:latest ."
                 }
-                echo 'Docker image successfully pushed to DockerHub!'
             }
         }
 
-        // --- 7. Deploy Stage (Example: Running the container) ---
+        // 6. Push to DockerHub
+        stage('Push to DockerHub') {
+            steps {
+                echo 'Pushing image to DockerHub...'
+                // Use the withCredentials binding for secure login
+                withCredentials([usernamePassword(credentialsId: "${DOCKERHUB_CREDENTIALS_ID}", passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
+                    sh "docker login -u ${DOCKER_USERNAME} -p ${DOCKER_PASSWORD}"
+                    sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
+                    sh "docker push ${IMAGE_NAME}:latest"
+                    sh "docker logout"
+                }
+            }
+        }
+
+        // 7. Deploy
         stage('Deploy') {
             steps {
-                echo 'Starting application container locally...'
-                // Stop and remove previous container (ignore errors if it doesn't exist)
+                echo 'Deploying container locally...'
+                // Stop and remove any old running container, then run the new one
                 sh 'docker stop my-app-container || true'
                 sh 'docker rm my-app-container || true'
-                
-                // Run the new container, exposing port 8080 (adjust port as needed for your Python app)
-                sh "docker run -d --name my-app-container -p 8080:8080 ${env.DOCKERHUB_USER}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-                echo 'Application deployed and running on port 8080.'
+                sh "docker run -d --name my-app-container ${IMAGE_NAME}:latest"
+                echo 'Deployment complete. Container is running.'
             }
         }
     }
