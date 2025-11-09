@@ -3,7 +3,7 @@ pipeline {
     environment {
         SONARQUBE = 'sonarkey'                // SonarQube server configured in Jenkins with this ID
         DOCKERHUB_CREDENTIALS = 'dockerhub'  // Jenkins credentials ID for DockerHub login (username + password/token)
-        IMAGE_NAME = "nishasubramaniyan/your-app"  // DockerHub repo name; adjust 'your-app' as needed
+        IMAGE_NAME = "nishasubramaniyan/your-app"  // DockerHub repo name; adjust replace 'your-app' with your image name
         GIT_REPO = 'https://github.com/nisha-subramaniyan/CI-CD_SonarQube-Docker.git'
         GIT_BRANCH = 'main'
     }
@@ -16,17 +16,18 @@ pipeline {
         stage('Build & Test') {
             steps {
                 echo 'Running build and tests...'
-                // Adjust commands to fit your app stack, example assumes Node.js
-                sh 'npm install'
-                sh 'npm test'
+                // Use Windows batch commands here
+                bat 'npm install'
+                bat 'npm test'
             }
         }
         stage('SonarQube Analysis') {
             steps {
                 script {
+                    // Use backslash paths and .bat for Windows
                     def scannerHome = tool 'SonarQubeScanner'
                     withSonarQubeEnv('sonarkey') {
-                        sh "${scannerHome}/bin/sonar-scanner"
+                        bat "\"${scannerHome}\\bin\\sonar-scanner.bat\""
                     }
                 }
             }
@@ -57,7 +58,8 @@ pipeline {
         stage('Deploy') {
             steps {
                 echo 'Deploying Docker container...'
-                sh "docker run -d --name myapp -p 8080:8080 ${IMAGE_NAME}:latest || docker restart myapp"
+                // Docker run command for Windows batch
+                bat "docker run -d --name myapp -p 8080:8080 ${IMAGE_NAME}:latest || docker restart myapp"
             }
         }
     }
