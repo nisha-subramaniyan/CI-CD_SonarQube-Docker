@@ -1,60 +1,69 @@
 pipeline {
-  agent any
-  environment {
-    SONAR_TOKEN = credentials('sonarkey')  // SonarQube token ID in Jenkins credentials
-    DOCKERHUB_USER = credentials('dockerhub') // DockerHub username credential in Jenkins
-    DOCKERHUB_PASS = credentials('dockerhub') // DockerHub password credential with same ID
-  }
-  triggers { 
-    githubPush()  // Trigger pipeline on every push to GitHub
-  }
-  stages {
-    stage('Clone') {
-      steps {
-        git branch: 'main', url: 'https://github.com/nisha-subramaniyan/CI-CD_SonarQube-Docker.git'  // Your repo URL
-      }
+    agent any
+    environment {
+        SONARQUBE = 'sonarkey'                // SonarQube server configured in Jenkins with this ID
+        DOCKERHUB_CREDENTIALS = 'dockerhub'  // Jenkins credentials ID for DockerHub login (username + password/token)
+        IMAGE_NAME = "nishasubramaniyan/your-app"  // DockerHub repo name; adjust 'your-app' as needed
+        GIT_REPO = 'https://github.com/nisha-subramaniyan/CI-CD_SonarQube-Docker.git'
+        GIT_BRANCH = 'main'
     }
-    stage('Build & Test') {
-      steps {
-        sh 'python3 -m pytest test_app.py'  // Adjust test command as needed
-      }
-    }
-    stage('SonarQube Analysis') {
-      steps {
-        withSonarQubeEnv('SonarQube') {  // SonarQube server config name in Jenkins
-          sh 'sonar-scanner -Dsonar.projectKey=CI-CD_SonarQube-Docker -Dsonar.sources=. -Dsonar.login=${SONAR_TOKEN}'
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
+            }
         }
-      }
-    }
-    stage('Quality Gate') {
-      steps {
-        timeout(time: 2, unit: 'MINUTES') {
-          waitForQualityGate abortPipeline: true  // Abort on failed quality gate
+        stage('Build & Test') {
+            steps {
+                echo 'Running build and tests...'
+                // Adjust commands to fit your app stack, example assumes Node.js
+                sh 'npm install'
+                sh 'npm test'
+            }
         }
-      }
-    }
-    stage('Docker Build') {
-      steps {
-        script {
-          docker.build("nishasubramaniyan/ci-cd_sonarqube-docker:${env.BUILD_NUMBER}")
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    def scannerHome = tool 'SonarQubeScanner'
+                    withSonarQubeEnv('sonarkey') {
+                        sh "${scannerHome}/bin/sonar-scanner"
+                    }
+                }
+            }
         }
-      }
-    }
-    stage('Docker Push') {
-      steps {
-        script {
-          docker.withRegistry('https://index.docker.io/v1/', 'dockerhub') {
-            docker.image("nishasubramaniyan/ci-cd_sonarqube-docker:${env.BUILD_NUMBER}").push()
-          }
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 2, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
         }
-      }
-    }
-    stage('Deploy') {
-      steps {
-        script {
-          sh 'docker run -d -p 5000:5000 nishasubramaniyan/ci-cd_sonarqube-docker:${env.BUILD_NUMBER}'
+        stage('Docker Build') {
+            steps {
+                script {
+                    docker.build("${IMAGE_NAME}:latest")
+                }
+            }
         }
-      }
+        stage('Push to DockerHub') {
+            steps {
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', "${DOCKERHUB_CREDENTIALS}") {
+                        docker.image("${IMAGE_NAME}:latest").push()
+                    }
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                echo 'Deploying Docker container...'
+                sh "docker run -d --name myapp -p 8080:8080 ${IMAGE_NAME}:latest || docker restart myapp"
+            }
+        }
     }
-  }
+    post {
+        always {
+            cleanWs()
+        }
+    }
 }
