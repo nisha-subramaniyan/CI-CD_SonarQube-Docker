@@ -1,11 +1,9 @@
-import static org.junit.Assert.assertEquals;
-import org.junit.Test;
+public class App {
+    public static String getGreeting() {
+        return "Hello from CI/CD Pipeline with Jenkins + SonarQube + Docker!";
+    }
 
-public class AppTest {
-
-    @Test
-    public void testGreeting() {
-        String expected = "Hello from CI/CD Pipeline with Jenkins + SonarQube + Docker!";
-        assertEquals(expected, App.getGreeting());
+    public static void main(String[] args) {
+        System.out.println(App.getGreeting());
     }
 }
