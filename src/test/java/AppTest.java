@@ -4,8 +4,8 @@ import org.junit.jupiter.api.Test;
 public class AppTest {
 
     @Test
-    public void testGreet() {
-        String expected = "Hello, CI/CD with Jenkins, SonarQube, and Docker!";
-        assertEquals(expected, App.greet());
+    public void testGreeting() {
+        String expected = "Hello from CI/CD Pipeline with Jenkins + SonarQube + Docker!";
+        assertEquals(expected, App.getGreeting());
     }
 }
