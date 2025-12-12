@@ -1,5 +1,3 @@
-FROM openjdk:17-jre-slim
-WORKDIR /app
-COPY target/*.jar app.jar
-EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+FROM openjdk:17
+ADD target/spring-devops.jar spring-devops.jar
+ENTRYPOINT ["java","-jar","/spring-devops.jar"]
